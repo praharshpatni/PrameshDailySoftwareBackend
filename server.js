@@ -19,133 +19,31 @@ const rateLimit = require('express-rate-limit');
 
 const app = express();
 const server = http.createServer(app);
-// const io = socketIO(server, {
-//     cors: {
-//         origin: 'https://dataentry.prameshwealth.com',
-//         methods: ['GET', 'POST'],
-//     }
-// });
-const io = socketIO(server, {
-    cors: {
-        origin: '*',
-        methods: ['GET', 'POST'],
-    }
-});
-
-const dropdownRoutes = require("./routes/dropdownRoutes");
-const { error } = require('console');
-
-let db;
-
-// === ✅ MySQL Database Connection ===
-mysql.createConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    // port: process.env.DB_PORT || 3306,
-}).then((connection) => {
-    db = connection;
-    console.log('✅ Connected to MySQL database');
-}).catch((err) => {
-    console.error(' Database connection failed:', err.stack);
-});
-
-// === 🔌 Socket.IO Setup ===
-io.on('connection', (socket) => {
-    console.log('Client connected:', socket.id);
-
-    socket.on('new_data', (data) => {
-        console.log('Received new_data:', data);
-        io.emit('update_data', data);
-    });
-
-    socket.on('disconnect', () => {
-        console.log('Client disconnected:', socket.id);
-    });
-});
-
-// for mailing to the user 
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: process.env.EMAIL, // your sender email
-        pass: process.env.EMAIL_PASS
-    }
-});
-
-function sendLoginAttemptEmail(toEmail, deviceName) {
-    const mailOptions = {
-        from: '"Pramesh Security Team" <your_email@gmail.com>',
-        to: toEmail,
-        subject: '🔒 Security Alert: Unauthorized Login Attempt Detected',
-        text: `Hello,\n\nWe detected a login attempt to your Pramesh account from device: ${deviceName}.\n\nIf this wasn't you, we strongly recommend changing your password immediately and contacting our support team.\n\n– Pramesh Security Team`,
-        html: `
-            <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-                <h2 style="color: #E63946;">🔒 Unauthorized Login Attempt</h2>
-                <p>Dear user,</p>
-                <p>We detected an attempt to access your <strong>Pramesh Data Entry System</strong> account from the following device:</p>
-                <p style="font-size: 16px; color: #0D1B2A;"><strong>Device Name:</strong> ${deviceName}</p>
-                
-                <p>If this attempt was <strong>not</strong> made by you, please take immediate action:</p>
-                <ul>
-                    <li>Change your account password.</li>
-                    <li>Enable two-step verification if not already enabled.</li>
-                    <li>Contact our support team at <a href="mailto:support@pramesh.com">support@pramesh.com</a></li>
-                </ul>
-
-                <p style="margin-top: 30px;">Stay safe,</p>
-                <p style="font-weight: bold;">– Pramesh Security Team</p>
-
-                <hr style="margin: 30px 0;">
-                <small style="color: #6C757D;">This is an automated message. If you did not initiate this request, please ignore this email or contact support.</small>
-            </div>
-        `
-    };
-
-    transporter.sendMail(mailOptions, (error, info) => {
-        if (error) {
-            console.error("Email failed:", error);
-        } else {
-            console.log("✅ Security alert email sent:", info.response);
-        }
-    });
-}
-
-app.use(bodyParser.json({ limit: '50mb' }));
-app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
-
-
-// === 🌐 Express Middleware ===
-app.use(express.json());
-// app.use(express.json({ limit: '100mb' }));
-app.use(compression({
-    threshold: 0,
-    filter: (req, res) => {
-        if (req.headers['x-no-compression']) {
-            return false;
-        }
-        return compression.filter(req, res);
-    }
-}));
 
 const allowedOrigins = [
     'http://localhost:3000',
-    'http://192.168.0.116:3000',
-    'http://192.168.0.162:3000',
-    "https://dataentry.prameshwealth.com"
+    'http://192.168.0.135:3000',
+    'http://192.168.0.135:4000',
+    "http://192.168.0.136:4000",
+    "http://192.168.0.136:3000",
+    "http://192.168.0.194:3000",
+    "http://192.168.0.194:4000",
+    "http://192.168.0.192:4000",
+    "http://192.168.0.192:3000"
 ];
+const io = socketIO(server, {
+    cors: {
+        origin: ["http://192.168.1.4:4000", "http://192.168.0.192:3000", "http://192.168.0.192:4000",
+            "http://192.168.0.194:3000", "http://192.168.0.194:4000", "http://192.168.0.135:3000", "http://192.168.0.135:4000", "http://192.168.1.4:3000", , 'http://localhost:4000', 'http://localhost:3000', "http://192.168.29.34:3000", "http://192.168.29.34:4000", "http://192.168.0.179:3000", "http://192.168.0.179:4000"],
+        methods: ['GET', 'POST'],
+    }
+});
+const { router: chatRoutes, initializeChat } = require('./routes/chatRoutes')
+const headerRoputes = require('./routes/headerRoutes')
+const dropdownRoutes = require("./routes/dropdownRoutes");
+const filterSaveRoutes = require("./routes/filterSaveRoutes");
+const { error } = require('console');
 
-// app.use(cors({
-//     origin: function (origin, callback) {
-//         if (!origin || allowedOrigins.includes(origin)) {
-//             callback(null, true)
-//         } else {
-//             callback(new Error('Not allowed by CORS'))
-//         }
-//     },
-//     credentials: true
-// }));
 
 app.use(cors({
     origin: function (origin, callback) {
@@ -157,6 +55,107 @@ app.use(cors({
     },
     credentials: true
 }));
+
+let db = require("./DatabaseConnection/dbConfig")
+
+db.getConnection()
+    .then((connection) => {
+        console.log('✅ Connected to MySQL database (Pool ready)');
+        connection.release(); // Release back to pool
+    })
+    .catch((err) => {
+        console.error('❌ Database pool initialization failed:', err.stack);
+        process.exit(1); // Exit if DB is down (critical for startup)
+    });
+
+
+initializeChat(io, db);
+
+const smtpHost = process.env.SMTP_HOST || 'mail.prameshwealth.com';
+const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
+const smtpSecure = (process.env.SMTP_SECURE === 'true'); // true => port 465, false => 587 STARTTLS
+const tlsReject = (process.env.SMTP_TLS_REJECT_UNAUTHORIZED !== 'false');
+
+const transporter = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpSecure,
+    auth: {
+        user: process.env.EMAIL,
+        pass: process.env.EMAIL_PASS,
+    },
+    tls: {
+        minVersion: 'TLSv1.2',
+        // Set rejectUnauthorized=false only if your host uses self-signed cert and you accept the risk
+        rejectUnauthorized: tlsReject
+    },
+    greetingTimeout: 10000,
+});
+
+(async function verifyMailer() {
+    try {
+        await transporter.verify();
+        console.log('✅ SMTP transporter verified (ready to send).');
+    } catch (err) {
+        console.error('❌ SMTP transporter verification failed:', err && err.message ? err.message : err);
+        // don't exit the process — log and allow server to run; you can optionally exit in prod
+    }
+})();
+
+function fromAddress() {
+    const email = process.env.EMAIL || 'no-reply@prameshwealth.com';
+    return `"Pramesh Team" <${email}>`;
+}
+async function sendLoginAttemptEmail(toEmail, deviceName) {
+    if (!toEmail) {
+        console.warn('sendLoginAttemptEmail: missing toEmail');
+        return;
+    }
+    const mailOptions = {
+        from: fromAddress(),
+        to: toEmail,
+        subject: '🔒 Security Alert: Unauthorized Login Attempt Detected',
+        text: `Hello,\n\nWe detected a login attempt to your Pramesh account from device: ${deviceName}.\n\nIf this wasn't you, change your password immediately and contact support.\n\n– Pramesh Security Team`,
+        html: `
+      <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+        <h2 style="color: #E63946;">🔒 Unauthorized Login Attempt</h2>
+        <p>Dear user,</p>
+        <p>We detected an attempt to access your <strong>Pramesh Data Entry System</strong> account from the following device:</p>
+        <p style="font-size: 16px; color: #0D1B2A;"><strong>Device Name:</strong> ${deviceName}</p>
+        <p>If this attempt was <strong>not</strong> made by you, please change your password and contact <a href="mailto:support@pramesh.com">support@pramesh.com</a></p>
+        <p style="margin-top: 30px;">– Pramesh Security Team</p>
+      </div>
+    `
+    };
+
+    try {
+        const info = await transporter.sendMail(mailOptions);
+        console.log('✅ Security alert email sent to', toEmail, info.response || info);
+        return { ok: true, info };
+    } catch (error) {
+        console.error('❌ Failed to send security alert email to', toEmail, error);
+        return { ok: false, error };
+    }
+}
+
+app.use(bodyParser.json({ limit: '50mb' }));
+app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
+
+
+// === 🌐 Express Middleware ===
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+// app.use(express.json({ limit: '100mb' }));
+app.use(compression({
+    threshold: 0,
+    filter: (req, res) => {
+        if (req.headers['x-no-compression']) {
+            return false;
+        }
+        return compression.filter(req, res);
+    }
+}));
+
 
 app.use(useragent.express());
 // === 📋 Route Logger Middleware ===
@@ -182,8 +181,12 @@ app.use((req, res, next) => {
     next();
 });
 
-
+// middlewares for route 
+app.use('/chat', chatRoutes);
+app.use('/header', headerRoputes);
 app.use('/api', dropdownRoutes);
+app.use('/filter', filterSaveRoutes);
+
 const queryLimiter = rateLimit({
     windowMs: 60 * 1000, // 1 minute
     max: 10, // limit to 10 queries per minute per IP
@@ -192,7 +195,166 @@ const queryLimiter = rateLimit({
 
 app.use('/api/run-query', queryLimiter);
 
-const allowedTables = ['KYC', 'Transaction', 'STP_Switch', 'Non_Financial', 'NSE_Pramesh', 'FFL_Transaction', 'FFL_STP_Switch', 'FFL_Non_Financial', 'NSE_FFL', 'FD', 'Realvalue'];
+const allowedTables = ['KYC', 'Transaction', 'STP_Switch', 'Non_Financial', 'NSE_Pramesh', 'FFL_Transaction', 'FFL_STP_Switch', 'FFL_Non_Financial', 'NSE_FFL', 'RV_Transaction', 'RV_NSE', 'RV_Non_Financial', 'RV_STP_Switch', 'FD'];
+const emailToRMMap = {
+    'vishal@prameshwealth.com': 'Vishal Vaidya',
+    "bhumika@prameshwealth.com": "Bhumika",
+    "happy@prameshwealth.com": "Happy",
+    "vinayak@prameshwealth.com": "Vinayak Shelar",
+    "navneet@prameshwealth.com": "Navneet Mishra"
+};
+
+const unrestricted_adminEmails = ['admin@gmail.com', 'praharsh@prameshwealth.com', 'prachi@prameshwealth.com', 'arpita@prameshwealth.com', "krishna@prameshwealth.com", "shweta@prameshwealth.com"];
+
+// WHATS APP ROUTES 
+// GET /chat/unread-counts?currentUserEmail=xyz@example.com
+// app.get('/chat/unread-counts', async (req, res) => {
+//     const { currentUserEmail } = req.query;
+//     if (!currentUserEmail) return res.status(400).json({ error: "Missing email" });
+
+//     try {
+//         const [rows] = await db.execute(`
+//             SELECT sender_email, COUNT(*) as unread_count
+//             FROM messages
+//             WHERE receiver_email = ?
+//               AND read_at IS NULL
+//             GROUP BY sender_email
+//         `, [currentUserEmail]);
+
+//         const counts = {};
+//         rows.forEach(row => {
+//             counts[row.sender_email] = row.unread_count;
+//         });
+
+//         res.json({ unreadCounts: counts });
+//     } catch (err) {
+//         console.error("Error fetching unread counts:", err);
+//         res.status(500).json({ error: "Server error" });
+//     }
+// });
+// GET /chat/unread-counts?currentUserEmail=xyz@example.com
+app.get('/chat/unread-counts', async (req, res) => {
+    const { currentUserEmail } = req.query;
+
+    if (!currentUserEmail) {
+        return res.status(400).json({ error: "Missing currentUserEmail" });
+    }
+
+    try {
+        const [rows] = await db.execute(`
+            SELECT 
+                other_user_email,
+                COUNT(CASE WHEN receiver_email = ? AND read_at IS NULL THEN 1 END) AS unread_count,
+                MAX(sent_at) AS last_message_time
+            FROM (
+                SELECT 
+                    CASE 
+                        WHEN sender_email = ? THEN receiver_email
+                        ELSE sender_email
+                    END AS other_user_email,
+                    sent_at,
+                    receiver_email,
+                    read_at
+                FROM messages
+                WHERE sender_email = ? OR receiver_email = ?
+            ) AS subquery
+            GROUP BY other_user_email
+        `, [
+            currentUserEmail,  // for COUNT unread
+            currentUserEmail,  // for CASE in subquery
+            currentUserEmail,  // WHERE sender
+            currentUserEmail   // WHERE receiver
+        ]);
+
+        const unreadCounts = {};
+        const lastMessageTimes = {};
+        console.log("unread count", unreadCounts)
+        console.log("lastmessage time", lastMessageTimes)
+
+        rows.forEach(row => {
+            const email = row.other_user_email;
+            unreadCounts[email] = parseInt(row.unread_count) || 0;
+            lastMessageTimes[email] = row.last_message_time;
+        });
+
+        res.json({
+            unreadCounts,
+            lastMessageTimes
+        });
+
+    } catch (err) {
+        console.error("Error fetching unread counts & last times:", err);
+        res.status(500).json({ error: "Server error" });
+    }
+});
+// POST /chat/mark-as-read
+app.post('/chat/mark-as-read', async (req, res) => {
+    const { currentUserEmail, otherUserEmail } = req.body;
+    console.log("current user email", currentUserEmail)
+
+    if (!currentUserEmail || !otherUserEmail) {
+        return res.status(400).json({ error: "Missing emails" });
+    }
+
+    try {
+        await db.execute(`
+            UPDATE messages
+            SET read_at = NOW()
+            WHERE receiver_email = ?
+              AND sender_email = ?
+              AND read_at IS NULL
+        `, [currentUserEmail, otherUserEmail]);
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error("Error marking as read:", err);
+        res.status(500).json({ error: "Server error" });
+    }
+});
+
+
+// starting of whats app configuration route 
+app.get('/chat/fetchActiveUsers', async (req, res) => {
+    const { currentUserEmail } = req.query;
+    if (!currentUserEmail) return res.status(400).json({ error: 'Email required' });
+
+    try {
+        const [rows] = await db.execute(
+            `SELECT user_email AS email, user_name, is_logged_in 
+             FROM users 
+             WHERE user_email != ? 
+             ORDER BY is_logged_in DESC, user_name ASC`,
+            [currentUserEmail]
+        );
+        res.json({ users: rows });
+    } catch (err) {
+        console.error('Error fetching users:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.get('/chat/messages', async (req, res) => {
+    const { currentUserEmail, otherUserEmail } = req.query;
+    if (!currentUserEmail || !otherUserEmail) return res.status(400).json({ error: 'Emails required' });
+
+    try {
+        const [rows] = await db.execute(
+            `SELECT m.*, r.message_text AS reply_text, r.sender_email AS reply_sender_email
+             FROM messages m
+             LEFT JOIN messages r ON m.reply_to_id = r.id
+             WHERE (m.sender_email = ? AND m.receiver_email = ?)
+                OR (m.sender_email = ? AND m.receiver_email = ?)
+             ORDER BY m.sent_at ASC`,
+            [currentUserEmail, otherUserEmail, otherUserEmail, currentUserEmail]
+        );
+        res.json({ messages: rows });
+    } catch (err) {
+        console.error('Error fetching messages:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// ending of whats app configuration route 
 
 
 app.post('/user/update-autosave', async (req, res) => {
@@ -293,76 +455,241 @@ const cleanAmount = (val) => {
 };
 
 app.post('/api/importExcel', async (req, res) => {
-    const { tableName, rows, created_by } = req.body;
+    const { tableName, rows, created_by, importMode = 'override' } = req.body;
 
     if (!tableName || !rows || !Array.isArray(rows)) {
         return res.status(400).json({ message: "Invalid request body" });
     }
-
-    const allowedTables = [
-        'KYC', 'Transaction', 'FD', 'STP_Switch', 'Non_Financial',
-        'NSE_Pramesh', 'FFL_Transaction', 'FFL_STP_Switch',
-        'FFL_Non_Financial', 'NSE_FFL', 'Realvalue'
-    ];
-
     if (!allowedTables.includes(tableName)) {
         return res.status(400).json({ message: "Invalid table name" });
     }
 
+    // Date conversion helper - more robust
+    const excelDateToMySQLDate = (value) => {
+        if (value === null || value === undefined || value === '' || value === 'Showing') return null;
+        const str = value.toString().trim();
+        if (!str) return null;
+        let date;
+        // Try standard Date parsing first (handles YYYY-MM-DD well)
+        date = new Date(str);
+        if (isNaN(date.getTime())) {
+            // Try parsing with separators (prioritize DD/MM/YYYY, DD-MM-YYYY)
+            const parts = str.split(/[\/\-\\.]/);
+            if (parts.length === 3) {
+                let day = parseInt(parts[0], 10);
+                let month = parseInt(parts[1], 10);
+                let year = parseInt(parts[2], 10);
+                // Handle 2-digit year
+                if (year < 100) {
+                    year = year > 50 ? 1900 + year : 2000 + year;
+                }
+                // Try DD-MM-YYYY first
+                if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 1900 && year <= 2100) {
+                    date = new Date(year, month - 1, day);
+                    // Validate no overflow
+                    if (isNaN(date.getTime()) || date.getDate() !== day) {
+                        // Fallback: MM-DD-YYYY
+                        [day, month] = [month, day];
+                        date = new Date(year, month - 1, day);
+                    }
+                }
+            }
+        }
+        if (isNaN(date.getTime())) {
+            console.warn(`📅 Could not parse date: "${str}"`);
+            return null;
+        }
+        const y = date.getFullYear();
+        if (!y || y < 1900 || y > 2100) return null;
+        const formatted = `${y}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+        return formatted;
+    };
+
+    // Numeric cleaning helper - preserve all valid numbers including 0
+    const cleanNumeric = (value, isInteger) => {
+        if (value === null || value === undefined || value === '') return null;
+        if (value === 0 || value === '0') return 0;
+        if (typeof value === 'number') {
+            if (isNaN(value)) return null;
+            return isInteger ? Math.floor(value) : value;
+        }
+        const strVal = value.toString().trim();
+        if (!strVal) return null;
+
+        // Remove commas and other non-numeric chars except . and -
+        const cleaned = strVal.replace(/,/g, '').replace(/[^\d.-]/g, '');
+        if (!cleaned || cleaned === '-' || cleaned === '.') return null;
+
+        const num = isInteger ? parseInt(cleaned, 10) : parseFloat(cleaned);
+        return isNaN(num) ? null : num;
+    };
+
+    // Clean string value - preserve empty strings as null, trim whitespace
+    const cleanString = (value) => {
+        if (value === null || value === undefined) return null;
+        const str = value.toString().trim();
+        return str === '' ? null : str;
+    };
+
     try {
+        // Get table schema
         const [columnsResult] = await db.execute(`SHOW COLUMNS FROM \`${tableName}\``);
         const validColumns = columnsResult.map(col => col.Field);
+        const columnTypes = {};
+        const columnNullable = {};
+        const columnDefaults = {};
 
-        let successCount = 0;
-        let skipped = [];
+        columnsResult.forEach(col => {
+            columnTypes[col.Field] = col.Type.toLowerCase();
+            columnNullable[col.Field] = col.Null === 'YES';
+            columnDefaults[col.Field] = col.Default;
+        });
 
-        for (const [index, row] of rows.entries()) {
-            const data = { ...row, created_by };
+        // Map incoming rows to DB format
+        const mappedRows = rows.map((row, rowIndex) => {
+            const data = { ...row };
+            if (created_by) data.created_by = created_by;
 
-            const mappedData = {};
+            const mapped = {};
 
             for (const key in data) {
-                const originalKey = key === 'Cheqe_No' ? 'Cheque_No' : key;
-                const matchedColumn = validColumns.find(col => col.toLowerCase() === originalKey.toLowerCase());
-
-                if (matchedColumn) {
+                // Normalize key: lowercase, replace non-alnum with _, trim
+                let normKey = key.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+                // Remove leading/trailing underscores
+                normKey = normKey.replace(/^_+|_+$/g, '');
+                // Handle common typos (keep as exact match)
+                if (normKey === 'cheqe_no') normKey = 'cheque_no'; // Lowercase for consistency, but adjust to DB case later
+                // Find matching column (case-insensitive)
+                const matchedCol = validColumns.find(col => col.toLowerCase() === normKey);
+                if (matchedCol) {
                     let value = data[key];
-
-                    // Normalize date fields (ends with _Date or Start_Date, End_Date, etc.)
-                    if (matchedColumn.toLowerCase().includes('date')) {
-                        if (!value || value === '' || value === 'Showing') {
-                            value = null;
-                        } else {
-                            value = excelDateToMySQLDate(value);
-                        }
+                    const colType = columnTypes[matchedCol];
+                    // Skip auto-increment ID columns
+                    if (matchedCol.toLowerCase() === 'id' && colType.includes('int') && value === '') {
+                        continue;
                     }
 
-                    // Clean amount-like fields
-                    if (['amount', 'rejected_amount'].includes(matchedColumn.toLowerCase())) {
-                        value = cleanAmount(value);
-                    }
+                    // FIXED: More precise date column detection
+                    // Only treat as date if column name exactly matches common date patterns
+                    // or column type explicitly contains 'date'
+                    const isDateColumn =
+                        colType.includes('date') ||
+                        colType.includes('timestamp') ||
+                        matchedCol.toLowerCase() === 'date' ||
+                        matchedCol.toLowerCase() === 'transaction_date' ||
+                        matchedCol.toLowerCase() === 'created_date' ||
+                        matchedCol.toLowerCase() === 'updated_date' ||
+                        matchedCol.toLowerCase() === 'entry_date' ||
+                        matchedCol.toLowerCase() === 'value_date' ||
+                        matchedCol.toLowerCase().endsWith('_date') ||
+                        matchedCol.toLowerCase().startsWith('date_');
 
-                    mappedData[matchedColumn] = value;
+                    // Process based on column type
+                    if (isDateColumn) {
+                        value = excelDateToMySQLDate(value);
+                    } else if (colType.includes('int') || colType.includes('decimal') || colType.includes('float') || colType.includes('double') || colType.includes('numeric')) {
+                        value = cleanNumeric(value, colType.includes('int'));
+                    } else if (colType.includes('char') || colType.includes('text') || colType.includes('varchar')) {
+                        value = cleanString(value);
+                    } else {
+                        value = cleanString(value);
+                    }
+                    mapped[matchedCol] = value; // Use exact DB column name
+                } else {
+                    // Log unmatched for debugging (first 5 per row)
+                    if (Object.keys(mapped).length < 5) {
+                        console.warn(`🔍 Unmatched header "${key}" (norm: "${normKey}") for table ${tableName}`);
+                    }
                 }
             }
 
-            try {
-                const columns = Object.keys(mappedData).map(col => `\`${col.trim()}\``).join(', ');
-                const values = Object.values(mappedData);
-                const placeholders = values.map(() => '?').join(', ');
+            return mapped;
+        });
 
-                const query = `INSERT INTO \`${tableName}\` (${columns}) VALUES (${placeholders})`;
-                await db.execute(query, values);
-                successCount++;
-            } catch (rowError) {
-                console.warn(`⛔ Skipped row ${index + 1}:`, rowError.message, JSON.stringify(data, null, 2));
-                skipped.push({ index: index + 1, reason: rowError.message });
+        // Log sample mapped row for debugging
+        if (mappedRows.length > 0) {
+            console.log(`🔍 Sample mapped row (first):`, JSON.stringify(mappedRows[0], null, 2));
+            console.log(`🔍 Columns being inserted:`, Object.keys(mappedRows[0]).join(', '));
+        }
+
+        // Fetch existing data count
+        const [countResult] = await db.execute(`SELECT COUNT(*) as total FROM \`${tableName}\``);
+        const totalExisting = countResult[0].total;
+
+        let successCount = 0;
+        let skipped = [];
+        let mode = importMode;
+        const errorSummary = {};
+
+        if (importMode === 'override' && totalExisting > 0) {
+            console.log(`🔄 Override mode: Clearing ${totalExisting} existing rows from ${tableName}`);
+            await db.execute(`DELETE FROM \`${tableName}\``);
+
+            // Reset auto-increment if needed
+            try {
+                await db.execute(`ALTER TABLE \`${tableName}\` AUTO_INCREMENT = 1`);
+            } catch (e) {
+                // Ignore if table doesn't have auto-increment
             }
         }
 
+        // Insert rows one by one with detailed error tracking
+        for (const [index, mapped] of mappedRows.entries()) {
+            try {
+                const colNames = Object.keys(mapped);
+                const colValues = Object.values(mapped);
+
+                // Skip empty rows
+                if (colNames.length === 0) {
+                    skipped.push({ index: index + 1, reason: 'Empty row - no valid columns' });
+                    continue;
+                }
+
+                const columns = colNames.map(c => `\`${c}\``).join(', ');
+                const placeholders = colValues.map(() => '?').join(', ');
+
+                const query = `INSERT INTO \`${tableName}\` (${columns}) VALUES (${placeholders})`;
+
+                await db.execute(query, colValues);
+                successCount++;
+
+            } catch (rowError) {
+                const errMsg = rowError.message || 'Unknown error';
+                const errType = errMsg.includes(':') ? errMsg.split(':')[0].trim().toLowerCase() : 'error';
+                errorSummary[errType] = (errorSummary[errType] || 0) + 1;
+
+                // Log detailed error for first few failures
+                if (skipped.length < 5) {
+                    console.error(`❌ Row ${index + 1} failed:`, errMsg);
+                    console.error(`   Data:`, JSON.stringify(mapped, null, 2));
+                }
+
+                skipped.push({
+                    index: index + 1,
+                    reason: errMsg,
+                    data: mapped // Include data for debugging
+                });
+            }
+        }
+
+        console.log(`✅ Import complete (${mode}): ${successCount} success, ${skipped.length} skipped`);
+
+        if (Object.keys(errorSummary).length > 0) {
+            console.log(`📊 Error summary:`, errorSummary);
+        }
+
         res.status(200).json({
-            message: `✅ ${successCount} rows inserted successfully.`,
-            skipped
+            message: mode === 'override'
+                ? `🔄 Override: ${successCount} rows replaced existing ${totalExisting} rows.`
+                : `➕ Append: ${successCount} rows added to existing ${totalExisting} rows.`,
+            mode,
+            previousRowCount: totalExisting,
+            skipped: skipped.slice(0, 100), // Limit skipped array size in response
+            totalSkipped: skipped.length,
+            totalProcessed: rows.length,
+            successCount,
+            errorSummary
         });
 
     } catch (error) {
@@ -370,7 +697,6 @@ app.post('/api/importExcel', async (req, res) => {
         res.status(500).json({ message: "Internal server error", error: error.message });
     }
 });
-
 
 const validateUserFromSession = (req, res, next) => {
     const email = req.headers['x-user-email'];
@@ -385,15 +711,8 @@ const validateUserFromSession = (req, res, next) => {
 };
 
 app.post('/api/search', validateUserFromSession, async (req, res) => {
-    // console.log('Received request at /api/search:', req.query, 'User:', req.user);
     const { table, query } = req.body;
 
-    // Validate table name to prevent SQL injection
-    const allowedTables = [
-        'KYC', 'Transaction', 'FD', 'STP_Switch', 'Non_Financial',
-        'NSE_Pramesh', 'FFL_Transaction', 'FFL_STP_Switch',
-        'FFL_Non_Financial', 'NSE_FFL', 'Realvalue'
-    ];
     if (!allowedTables.includes(table)) {
         console.log('Invalid table name:', table);
         return res.status(400).json({ error: 'Invalid table name' });
@@ -422,7 +741,6 @@ app.post('/api/search', validateUserFromSession, async (req, res) => {
         console.log('Executing query:', sql, 'Params:', params);
         const [rows] = await db.query(sql, params);
 
-        // console.log('Search results:', rows);
         res.json(rows);
     } catch (error) {
         console.error('Search error:', error.message, error);
@@ -505,12 +823,6 @@ app.post('/api/run-query', validateUserFromSession, async (req, res) => {
 // user login and logout route 
 
 app.post('/login', async (req, res) => {
-
-    // var plainPassword = "Divya@123"
-    // const saltRounds = 10;
-    // const hashedPassword = await bcrypt.hash(plainPassword, saltRounds);
-    // console.log("//////////", hashedPassword);
-
     const { email, password } = req.body;
     const sqlInjectionPattern = /('|--|;|\/\*|\*\/)/i;
     if (
@@ -521,50 +833,120 @@ app.post('/login', async (req, res) => {
     ) {
         return res.status(400).json({ error: 'Invalid input format.' });
     }
-
     try {
         // 1. Fetch user
         const [users] = await db.query('SELECT * FROM users WHERE user_email = ?', [email]);
         if (users.length === 0) {
             return res.status(400).json({ error: 'User not found' });
         }
-
         const user = users[0];
-
         // 2. Validate password
         const isPasswordValid = (password === user.password);
         if (!isPasswordValid) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
-
-        // 3. Check is_logged_in and send email if already logged in
+        // 3. Check admin approval status (only for RM role; skip for admin)
+        if (user.role === 'rm' && user.is_approved_by_admin === 'pending') {
+            return res.status(402).json({ message: 'pending', error: 'Access not allowed by admin. Your request is pending approval.' });
+        }
+        if (user.role === 'rm' && user.is_approved_by_admin === 'rejected') {
+            return res.status(402).json({ message: 'rejected', error: 'Access not allowed by admin. Your request is pending approval.' });
+        }
+        // 4. Check is_logged_in and send email if already logged in
         if (user.is_logged_in) {
             console.log("Email Sending...")
             const deviceName = os.hostname();
             sendLoginAttemptEmail(user.user_email, deviceName); // 👈 send unauthorized login alert
             return res.status(403).json({ error: 'User is already logged in on another device' });
         }
-
-        // 4. Mark as logged in
+        // 5. Mark as logged in
         await db.query('UPDATE users SET is_logged_in = 1, login_time = NOW(), logout_time = NULL, session_duration = NULL WHERE user_email = ?', [email]);
-
         io.emit("logintoPrameshDataSystem")
-        // 5. Return success
+        // 6. Return success
         res.json({
             email: user.user_email,
             name: user.user_name
         });
-
     } catch (err) {
         console.error('Login error:', err);
         res.status(500).json({ error: 'Server error' });
     }
 });
 
+app.post('/register', async (req, res) => {
+    try {
+        const { username, email, password } = req.body;
+        // Server-side validation (unchanged)
+        if (!username || !email || !password) {
+            return res.status(400).json({ error: 'Please fill all fields' });
+        }
+
+        const trimmedUsername = username.trim();
+        const trimmedEmail = email.trim();
+        const trimmedPassword = password.trim();
+
+        if (trimmedUsername.length < 3) {
+            return res.status(400).json({ error: 'Username must be at least 3 characters' });
+        }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(trimmedEmail)) {
+            return res.status(400).json({ error: 'Please enter a valid email address' });
+        }
+
+        if (trimmedPassword.length < 6) {
+            return res.status(400).json({ error: 'Password must be at least 6 characters' });
+        }
+
+        const [existingUsers] = await db.execute(
+            'SELECT id FROM users WHERE user_name = ? OR user_email = ?',
+            [trimmedUsername, trimmedEmail]
+        );
+
+        if (existingUsers.length > 0) {
+            return res.status(400).json({ error: 'Username or email already exists' });
+        }
+
+
+        // Insert new user with role='rm', is_approved_by_admin='pending'
+        const [insertResult] = await db.execute(
+            'INSERT INTO users (user_name, user_email, password, role, is_approved_by_admin) VALUES (?, ?, ?, ?, ?)',
+            [trimmedUsername, trimmedEmail, password, 'rm', 'pending']
+        );
+
+        const newUserId = insertResult.insertId;
+
+        // Fetch the created user
+        const [newUser] = await db.execute(
+            'SELECT id, user_name AS username, user_email AS email, registered_at FROM users WHERE id = ?',
+            [newUserId]
+        );
+
+        const newRm = newUser[0];
+
+        // Emit real-time event to all connected admin clients
+        io.emit('new_rm', {
+            id: newRm.id,
+            user_name: newRm.username,
+            user_email: newRm.email,
+            registered_at: newRm.registered_at
+        });
+
+        // Response to registering user
+        res.status(201).json({
+            message: 'Registration successful - Pending admin approval',
+            user: newRm
+        });
+
+    } catch (error) {
+        console.error('Registration error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+
 app.post('/logout', express.json(), async (req, res) => {
     const { email } = req.body;
-    console.log("🔒 Logging out user:", email);
-
     if (!email) {
         return res.status(400).json({ error: 'Email required for logout' });
     }
@@ -600,19 +982,21 @@ app.post('/logout', express.json(), async (req, res) => {
 
 // === 📥 API: Get Table Data ===
 
+// === 📥 API: Get Table Data ===
+// Update your backend route to include created_date
 app.get('/api/getTableData/:submodule', (req, res) => {
     if (!db) {
         return res.status(503).json({ error: 'Database not connected' });
     }
 
     const { submodule } = req.params;
-    const allowedTables = ['KYC', 'Transaction', 'FD', 'STP_Switch', 'Non_Financial', 'NSE_Pramesh', 'FFL_Transaction', 'FFL_STP_Switch', 'FFL_Non_Financial', 'NSE_FFL', 'Realvalue'];
 
     if (!allowedTables.includes(submodule)) {
         return res.status(400).json({ error: 'Invalid table name' });
     }
 
-    db.query(`SELECT * FROM \`${submodule}\` WHERE is_deleted = 0`)
+    // Modified to include DATE(created_at) as created_date
+    db.query(`SELECT *, DATE(created_at) as created_date FROM \`${submodule}\` WHERE is_deleted = 0 ORDER BY id DESC`)
         .then(([rows]) => {
             const formatted = rows.map(row => {
                 const formattedRow = {};
@@ -623,6 +1007,10 @@ app.get('/api/getTableData/:submodule', (req, res) => {
                     } else {
                         formattedRow[key] = row[key];
                     }
+                }
+                // Add created_date separately if it exists
+                if (row.created_date) {
+                    formattedRow.created_date = row.created_date;
                 }
                 return formattedRow;
             });
@@ -638,14 +1026,8 @@ app.get('/api/getTableData/:submodule', (req, res) => {
 // === 📤 API: Save Table Data ===
 
 // For New Row Entries 
-
 app.post('/api/insertTableData', async (req, res) => {
     const { tableName, entries } = req.body;
-
-    const allowedTables = [
-        'KYC', 'Transaction', 'FD', 'STP_Switch', 'Non_Financial', 'Realvalue',
-        'NSE_Pramesh', 'FFL_Transaction', 'FFL_STP_Switch', 'FFL_Non_Financial', 'NSE_FFL'
-    ];
 
     if (!allowedTables.includes(tableName)) {
         return res.status(400).json({ error: 'Invalid table name' });
@@ -669,10 +1051,10 @@ app.post('/api/insertTableData', async (req, res) => {
     }
 
     try {
-        let insertCount = 0;
-        const insertedRows = []; // Fixed: Collect inserted rows with IDs
+        const insertedRows = []; // Collect inserted rows with IDs
 
-        for (const row of entries) {
+        // Parallelize inserts for efficiency (non-dependent operations)
+        const insertPromises = entries.map(async (row) => {
             if ('id' in row) delete row.id;
             if ('created_at' in row) delete row.created_at;
             if ('updated_at' in row) delete row.updated_at;
@@ -697,7 +1079,7 @@ app.post('/api/insertTableData', async (req, res) => {
 
             if (onlyDatesFilled) {
                 console.log(`⛔ Skipped insert for blank row with only date fields.`);
-                continue;
+                return null; // Skip and return null to filter later
             }
 
             // Add timestamps manually
@@ -718,84 +1100,72 @@ app.post('/api/insertTableData', async (req, res) => {
             const sql = `INSERT INTO \`${tableName}\` (${escapedFields}) VALUES (${placeholders})`;
 
             const [result] = await db.query(sql, values);
-            insertCount++;
-            // Fixed: Push copy of row with insertId (server stores full row, but return sanitized for UI)
-            insertedRows.push({ ...row, id: result.insertId });
+            // Return copy of row with insertId (server stores full row, but return sanitized for UI)
+            return { ...row, id: result.insertId };
+        });
+
+        const results = await Promise.all(insertPromises);
+        const validInsertedRows = results.filter(row => row !== null);
+        const insertCount = validInsertedRows.length;
+
+        // Emit socket event with inserted rows (only the changed/inserted ones)
+        if (validInsertedRows.length > 0) {
+            io.emit('rowInserted', { tableName, rows: validInsertedRows });
         }
 
-        // Emit socket event with inserted rows
-        io.emit('rowInserted', { tableName, rows: insertedRows });
-
-        // Fixed: Return insertedRows in response
-        res.json({ success: true, inserted: insertCount, insertedRows });
+        // Return insertedRows in response
+        res.json({ success: true, inserted: insertCount, insertedRows: validInsertedRows });
     } catch (err) {
         console.error("Insert Error:", err);
         res.status(500).json({ success: false, message: "Insert failed" });
     }
 });
 
-
 // For Existing Row but Modified Entries 
-
 app.put('/api/updateTableData', async (req, res) => {
-    const { tableName, entries } = req.body;
-
-    const allowedTables = [
-        'KYC', 'Transaction', 'FD', 'STP_Switch', 'Non_Financial', 'Realvalue',
-        'NSE_Pramesh', 'FFL_Transaction', 'FFL_STP_Switch', 'FFL_Non_Financial', 'NSE_FFL'
-    ];
+    const { tableName, data } = req.body;
 
     if (!allowedTables.includes(tableName)) {
         return res.status(400).json({ error: 'Invalid table name' });
     }
 
-    const numericFields = [
-        'Amount', 'Total_Amount', 'Installment', 'No_of_Installment', 'Re_Amount', 'Rejected_Amount', 'NAV'
-    ];
+    const { rowId, field, value, timestamp, user, submodule } = data;
+
+    if (!rowId || !field) {
+        return res.status(400).json({ error: "rowId and field are required" });
+    }
+
+    let preparedValue = value;
+    const normalizedField = field.toLowerCase().replace(/_/g, ' ');
+    if (
+        typeof value === 'string' &&
+        value.trim() === '' &&
+        (normalizedField === 'proceed date' || normalizedField === 'update date' || normalizedField === 'redemption date')
+    ) {
+        preparedValue = null;
+    }
 
     try {
-        const updatedRows = [];
+        const sql = `UPDATE \`${tableName}\`
+                        SET \`${field}\` = ?, 
+                            modified_by = ?, 
+                            updated_at = NOW()
+                        WHERE id = ?`;
 
-        for (const row of entries) {
-            const id = row.id;
-            if (!id) continue;
+        await db.query(sql, [preparedValue, user || 'Unknown', rowId]);
 
-            numericFields.forEach(field => {
-                if (row[field] === '') {
-                    row[field] = 0;
-                }
-            });
+        io.emit('rowUpdated', {
+            tableName,
+            data: { ...data, value: preparedValue }
+        });
 
-            if (!('modified_by' in row) || !row.modified_by) {
-                row.modified_by = 'Unknown';
-            }
+        return res.json({ success: true });
 
-            // Manually update timestamp
-            row.updated_at = new Date();
-
-            const fields = Object.keys(row).filter(f => f !== 'id');
-            const updates = fields.map(f => `\`${f}\` = ?`).join(', ');
-            const values = fields.map(f => row[f]);
-            values.push(id);
-
-            const sql = `UPDATE \`${tableName}\` SET ${updates} WHERE id = ?`;
-
-            // console.log("UPDATES", values)
-            await db.query(sql, values);
-            updatedRows.push(row);
-        }
-
-        io.emit('rowUpdated', { tableName, rows: updatedRows });
-
-        res.json({ success: true, updated: updatedRows.length });
     } catch (err) {
-        console.error("Update Error:", err);
-        res.status(500).json({ success: false, message: "Update failed" });
+        console.error("DB Update Error:", err);
+        return res.status(500).json({ error: "Database update failed" });
     }
 });
-
-
-
 
 // for deleting the row 
 app.delete('/api/deleteRows', async (req, res) => {
@@ -816,7 +1186,9 @@ app.delete('/api/deleteRows', async (req, res) => {
 
         const [result] = await db.query(query, params);
 
+        // Emit socket event with only deleted IDs (not full table)
         io.emit('rowDeleted', { tableName, ids });
+
         res.json({ message: "Rows marked as deleted", affectedRows: result.affectedRows });
     } catch (err) {
         console.error("Delete error:", err);
@@ -824,9 +1196,7 @@ app.delete('/api/deleteRows', async (req, res) => {
     }
 });
 
-
 // for deleting all selected rows 
-
 app.delete('/api/deleteSelectedRows', async (req, res) => {
     const { tableName, ids, deleted_by } = req.body;
 
@@ -845,14 +1215,15 @@ app.delete('/api/deleteSelectedRows', async (req, res) => {
 
         const [result] = await db.query(query, params);
 
+        // Emit socket event with only deleted IDs (not full table)
         io.emit('rowDeleted', { tableName, ids });
+
         res.json({ message: "Rows marked as deleted", affectedRows: result.affectedRows });
     } catch (err) {
         console.error("SQL update error:", err);
         res.status(500).json({ message: "Server error while marking rows as deleted." });
     }
 });
-
 
 // to get all logged Queries
 
@@ -917,15 +1288,6 @@ app.post('/api/run-query', async (req, res) => {
 });
 
 
-
-
-const emailToRMMap = {
-    'vishalvaidya@gmail.com': 'Vishal Vaidya',
-    'arpita@gmail.com': 'Arpita Parmar',
-    'prachi@gmail.com': 'Prachi Panchal'
-};
-
-const unrestricted_adminEmails = ['admin@gmail.com', 'praharshpatni@gmail.com'];
 
 app.post('/api/chart-data', async (req, res) => {
     const { fromDate, duration } = req.body;
@@ -1011,7 +1373,6 @@ app.post('/api/chart-data', async (req, res) => {
 
 // Get the earliest received date for SIP or Lumpsum
 app.get('/api/chart-start-date', async (req, res) => {
-    // console.log("✅ /api/chart-start-date HIT");
 
     try {
         const [rows] = await db.query(`
@@ -1025,7 +1386,6 @@ app.get('/api/chart-start-date', async (req, res) => {
         if (!startDate) {
             return res.status(404).json({ error: 'No transactions found' });
         }
-        // console.log("start date", startDate)
 
         res.json({ startDate });
     } catch (err) {
@@ -1083,8 +1443,6 @@ app.get('/api/chart-overview', async (req, res) => {
             additional: Number(additional[0].total || 0),
             redemption: Number(redemption[0].total || 0)
         };
-
-        // console.log(amounts.reSIP);
         const totalInvestments = amounts.newSIP + amounts.reSIP + amounts.lumpsum + amounts.additional;
         const netAmount = totalInvestments - amounts.redemption;
 
@@ -1113,19 +1471,37 @@ app.get('/api/chart-overview', async (req, res) => {
 // UPDATED /api/client-stats TO INCLUDE RAW DATA
 
 app.post('/api/client-stats', async (req, res) => {
-    const { month } = req.body;
+    const { month, email } = req.body;
 
     try {
+        // ---- DATE RANGE ----
         const startDate = new Date(`${month}-01`);
-        const endDate = new Date();
+        const endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0);
+        endDate.setHours(23, 59, 59, 999);
 
-        const [rows] = await db.query(
-            `SELECT Client_Type, COUNT(*) as count
-             FROM transaction
-             WHERE Received_Date BETWEEN ? AND ? AND is_deleted = 0 AND Client_Type != ''
-             GROUP BY Client_Type`,
-            [startDate, endDate]
-        );
+        // ---- RM FILTER ----
+        const rmName = emailToRMMap[email] || null;
+
+        let whereClause = `
+            Received_Date BETWEEN ? AND ?
+            AND is_deleted = 0
+            AND Client_Type != ''
+        `;
+        let params = [startDate, endDate];
+
+        if (rmName) {
+            whereClause += ` AND RM = ?`;
+            params.push(rmName);
+        }
+
+        const query = `
+            SELECT Client_Type, COUNT(*) AS count
+            FROM transaction
+            WHERE ${whereClause}
+            GROUP BY Client_Type
+        `;
+
+        const [rows] = await db.query(query, params);
 
         const chart = {
             labels: rows.map(r => r.Client_Type),
@@ -1133,12 +1509,15 @@ app.post('/api/client-stats', async (req, res) => {
                 {
                     label: 'Clients',
                     data: rows.map(r => r.count),
-                    backgroundColor: rows.map((_, i) => ['#4caf50', '#f44336', '#2196f3', '#ff9800'][i % 4])
+                    backgroundColor: rows.map((_, i) =>
+                        ['#4caf50', '#f44336', '#2196f3', '#ff9800'][i % 4]
+                    )
                 }
             ]
         };
 
         res.json({ chart, rawData: rows });
+
     } catch (err) {
         console.error('Client stats error:', err);
         res.status(500).json({ error: 'Failed to fetch client stats' });
@@ -1200,8 +1579,6 @@ app.get('/api/distinct-approach-by', async (req, res) => {
         const uniquePramesh = [...new Set(prameshRows.map(r => r.name))];
         const uniqueFfl = [...new Set(fflRows.map(r => r.name))];
 
-        // console.log("Distinct values from server (normalized):", uniquePramesh);
-
         res.json({
             pramesh: uniquePramesh,
             ffl: uniqueFfl,
@@ -1213,12 +1590,141 @@ app.get('/api/distinct-approach-by', async (req, res) => {
     }
 });
 
+// Done
+app.post('/api/calculate-sip-commission', async (req, res) => {
+    const { approach_by, fromDate, duration, table } = req.body;
+    const transactionType = "SIP";
+    console.log('API called with params:', { approach_by, fromDate, duration, table, transactionType });
 
+    if (!approach_by || !fromDate || !duration || !table) {
+        console.log('Error: Missing required fields');
+        return res.status(400).json({ error: 'Missing fields' });
+    }
 
-app.post('/api/calculate-commission', async (req, res) => {
-    console.log("request from frontend", req.body)
-    const { approach_by, fromDate, duration, table, transactionType } = req.body;
-    // console.log("Transaction type", transactionType)
+    try {
+        const from = new Date(fromDate);
+        const to = new Date(from);
+        to.setMonth(to.getMonth() + parseInt(duration) - 1);
+
+        const targetMonth = to.getMonth();
+        const targetYear = to.getFullYear();
+        const lastDayOfMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+        to.setDate(lastDayOfMonth);
+
+        const fromStr = from.toISOString().split('T')[0];
+        const toStr = to.toISOString().split('T')[0];
+
+        console.log('Date range:', { fromStr, toStr });
+
+        // Support single or multiple tables
+        const tables = Array.isArray(table) ? table : [table];
+
+        // === CASE-INSENSITIVE CHECK: Is approach_by an RM name? ===
+        const rmValuesLower = Object.values(emailToRMMap).map(name => name.trim().toLowerCase());
+        const approachByLower = approach_by.trim().toLowerCase();
+
+        const applySkippingLogic = rmValuesLower.includes(approachByLower);
+
+        if (applySkippingLogic) {
+            console.log(`"${approach_by}" matches an RM name (case-insensitive) → WILL apply skipping logic (skip first 15 per month)`);
+        } else {
+            console.log(`"${approach_by}" does NOT match any RM name → NO skipping → commission on ALL transactions`);
+        }
+
+        // Optional: tighter query for RMs (RM = name too) — also case-insensitive safe
+        const useRMFilter = applySkippingLogic;
+
+        // Build query
+        const queries = tables.map(t => {
+            let whereCondition = `\`${t}\`.Approach_By = ?`;
+            if (useRMFilter) {
+                whereCondition = `\`${t}\`.Approach_By = ? AND \`${t}\`.RM = ?`;
+            }
+
+            return `
+                SELECT 
+                    \`${t}\`.RM,
+                    DATE_FORMAT(\`${t}\`.Received_Date, '%d-%m-%Y') AS Date,
+                    \`${t}\`.Client_Name,
+                    \`${t}\`.Transaction_Type,
+                    \`${t}\`.Scheme,
+                    \`${t}\`.Amount,
+                    \`${t}\`.Received_Date AS Original_Date
+                FROM \`${t}\`
+                WHERE \`${t}\`.is_deleted = 0
+                  AND ${whereCondition}
+                  AND \`${t}\`.Received_Date BETWEEN ? AND ?
+                  AND \`${t}\`.Transaction_Type = ?
+                  AND \`${t}\`.TR_status = 'success'
+            `;
+        }).join(" UNION ALL ");
+
+        // Parameters (original casing used in query — DB collation should handle case if needed)
+        const params = tables.flatMap(() => {
+            if (useRMFilter) {
+                return [approach_by, approach_by, fromStr, toStr, transactionType];
+            } else {
+                return [approach_by, fromStr, toStr, transactionType];
+            }
+        });
+
+        // Execute query
+        const [rows] = await db.query(queries, params);
+
+        console.log(`Total raw rows fetched: ${rows.length}`);
+
+        let finalRows = [...rows];
+        let total = 0;
+
+        // === APPLY SKIPPING ONLY IF approach_by IS AN RM (case-insensitive match) ===
+        if (applySkippingLogic && rows.length > 0) {
+            console.log('Applying special skipping logic: skip first 15 transactions per month');
+
+            finalRows.sort((a, b) => new Date(a.Original_Date) - new Date(b.Original_Date));
+
+            const rowsByMonth = {};
+            finalRows.forEach(row => {
+                const date = new Date(row.Original_Date);
+                const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                if (!rowsByMonth[monthYear]) rowsByMonth[monthYear] = [];
+                rowsByMonth[monthYear].push(row);
+            });
+
+            const filteredRows = [];
+            Object.keys(rowsByMonth).sort().forEach(monthYear => {
+                const monthRows = rowsByMonth[monthYear];
+                if (monthRows.length > 15) {
+                    console.log(`Month ${monthYear}: ${monthRows.length} rows → keeping ${monthRows.length - 15} after skipping first 15`);
+                    filteredRows.push(...monthRows.slice(15));
+                } else {
+                    console.log(`Month ${monthYear}: only ${monthRows.length} rows (≤15) → skipping ALL for this month`);
+                }
+            });
+
+            finalRows = filteredRows;
+        } else {
+            console.log('No skipping applied → using all transactions');
+        }
+
+        total = finalRows.reduce((sum, row) => sum + Number(row.Amount || 0), 0);
+
+        finalRows = finalRows.map(({ Original_Date, ...rest }) => rest);
+
+        console.log(`Final result → Rows: ${finalRows.length}, Total Amount: ₹${total}`);
+
+        res.json({ total, rows: finalRows });
+
+    } catch (err) {
+        console.error('Error calculating commission:', err);
+        res.status(500).json({ error: 'Failed to calculate commission' });
+    }
+});
+
+app.post("/api/calculate-lumpsum-commission", async (req, res) => {
+    const { approach_by, fromDate, duration, table } = req.body;
+    const transactionType = "Lumpsum";
+
+    console.log('Lumpsum API called with params:', { approach_by, fromDate, duration, table });
 
     if (!approach_by || !fromDate || !duration || !table) {
         return res.status(400).json({ error: 'Missing fields' });
@@ -1227,58 +1733,265 @@ app.post('/api/calculate-commission', async (req, res) => {
     try {
         const from = new Date(fromDate);
         const to = new Date(from);
-
-        to.setMonth(to.getMonth() + parseInt(duration));
+        to.setMonth(to.getMonth() + parseInt(duration) - 1);
+        const lastDayOfMonth = new Date(to.getFullYear(), to.getMonth() + 1, 0).getDate();
+        to.setDate(lastDayOfMonth);
 
         const fromStr = from.toISOString().split('T')[0];
         const toStr = to.toISOString().split('T')[0];
-        console.log("from date", fromStr)
-        console.log("to date", toStr)
-        const [rows] = await db.query(
-            `SELECT 
-        RM, 
-        DATE_FORMAT(Received_Date, '%d-%m-%Y') as Date, 
-        Client_Name, 
-        Transaction_Type, 
-        Scheme, 
-        Amount
-     FROM ?? 
-     WHERE is_deleted = 0 
-     AND Approach_By = ? 
-     AND Received_Date BETWEEN ? AND ? 
-     AND Transaction_Type = ?
-     AND TR_status = 'success'`,
-            [table, approach_by, fromStr, toStr, transactionType]
+
+        console.log('Date range:', { fromStr, toStr });
+
+        const tables = Array.isArray(table) ? table : [table];
+
+        // RM Check
+        const rmValuesLower = Object.values(emailToRMMap).map(name => name.trim().toLowerCase());
+        const approachByLower = approach_by.trim().toLowerCase();
+        const isRM = rmValuesLower.includes(approachByLower);
+
+        const useRMFilter = isRM;
+
+        // Fetch Lumpsum
+        const lumpsumQueries = tables.map(t => {
+            let where = `\`${t}\`.Approach_By = ?`;
+            if (useRMFilter) where += ` AND \`${t}\`.RM = ?`;
+            return `
+                SELECT 
+                    \`${t}\`.RM,
+                    DATE_FORMAT(\`${t}\`.Received_Date, '%d-%m-%Y') AS Date,
+                    \`${t}\`.Client_Name,
+                    \`${t}\`.Scheme,
+                    \`${t}\`.Amount,
+                    \`${t}\`.Received_Date AS Original_Date,
+                    \`${t}\`.Folio_Number,
+                    \`${t}\`.Redemption_Date
+                FROM \`${t}\`
+                WHERE \`${t}\`.is_deleted = 0
+                  AND ${where}
+                  AND \`${t}\`.Scheme_Type != 'Debt'
+                  AND \`${t}\`.Received_Date BETWEEN ? AND ?
+                  AND \`${t}\`.Transaction_Type = ?
+                  AND \`${t}\`.TR_status = 'Success'
+            `;
+        }).join(" UNION ALL ");
+
+        const lumpsumParams = tables.flatMap(() =>
+            useRMFilter
+                ? [approach_by, approach_by, fromStr, toStr, transactionType]
+                : [approach_by, fromStr, toStr, transactionType]
         );
 
-        const [totalRes] = await db.query(
-            `SELECT SUM(Amount) as total FROM ?? 
-     WHERE is_deleted = 0 
-     AND Approach_By = ? 
-     AND Received_Date BETWEEN ? AND ? 
-     AND Transaction_Type = ?
-     AND TR_status = 'success'`,
-            [table, approach_by, fromStr, toStr, transactionType]
+        const [lumpsumRows] = await db.query(lumpsumQueries, lumpsumParams);
+        console.log(`Fetched ${lumpsumRows.length} Lumpsum rows`);
+
+        // Fetch Redemptions
+        const redemptionQueries = tables.map(t => {
+            let where = `\`${t}\`.Approach_By = ?`;
+            if (useRMFilter) where += ` AND \`${t}\`.RM = ?`;
+            return `
+                SELECT 
+                    Client_Name,
+                    Scheme,
+                    Amount AS Redemption_Amount,
+                    Received_Date AS Redemption_Received_Date,
+                    Redemption_Date AS Original_Investment_Date,
+                    DATE_FORMAT(Received_Date, '%d-%m-%Y') AS Redemption_Display_Date,
+                    DATE_FORMAT(Redemption_Date, '%d-%m-%Y') AS Investment_Date_Display
+                FROM \`${t}\`
+                WHERE \`${t}\`.is_deleted = 0
+                  AND ${where}
+                  AND \`${t}\`.Scheme_Type != 'Debt'
+                  AND \`${t}\`.Received_Date BETWEEN ? AND ?
+                  AND \`${t}\`.Transaction_Type = 'Redemption'
+                  AND \`${t}\`.TR_status = 'Success'
+            `;
+        }).join(" UNION ALL ");
+
+        const redemptionParams = tables.flatMap(() =>
+            useRMFilter
+                ? [approach_by, approach_by, fromStr, toStr]
+                : [approach_by, fromStr, toStr]
         );
 
+        const [redemptionRows] = await db.query(redemptionQueries, redemptionParams);
+        console.log(`Fetched ${redemptionRows.length} Redemption rows`);
 
-        const total = Number(totalRes[0].total || 0);
+        let totalEligibleAmount = 0;
+        let totalCommission = 0;
+        let monthWiseBreakdown = [];
+        let deductionDetails = [];
 
-        console.log("res from server ", total, rows)
-        res.json({ total, rows });
+        const totalLumpsumAll = lumpsumRows.reduce((sum, r) => sum + Number(r.Amount || 0), 0);
+
+        if (isRM) {
+            // Group lumpsum by month
+            const lumpsumByMonth = {};
+            lumpsumRows.forEach(row => {
+                const dt = new Date(row.Original_Date);
+                const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+                const monthName = dt.toLocaleString('default', { month: 'long', year: 'numeric' });
+
+                if (!lumpsumByMonth[key]) lumpsumByMonth[key] = { monthName, gross: 0 };
+                lumpsumByMonth[key].gross += Number(row.Amount || 0);
+            });
+
+            // Group early redemptions by redemption processing month
+            const earlyRedemptionsByMonth = {};
+            redemptionRows.forEach(red => {
+                const redReceivedDate = new Date(red.Redemption_Received_Date);
+                const redMonthKey = `${redReceivedDate.getFullYear()}-${String(redReceivedDate.getMonth() + 1).padStart(2, '0')}`;
+                const redMonthName = redReceivedDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+
+                let investmentDate = null;
+                if (red.Original_Investment_Date) {
+                    if (typeof red.Original_Investment_Date === 'string') {
+                        const parts = red.Original_Investment_Date.split('-');
+                        if (parts.length === 3) {
+                            const [d, m, y] = parts.map(Number);
+                            investmentDate = new Date(y, m - 1, d);
+                        }
+                    } else {
+                        investmentDate = new Date(red.Original_Investment_Date);
+                    }
+                }
+
+                if (!investmentDate || isNaN(investmentDate.getTime())) return;
+
+                const daysDiff = (redReceivedDate - investmentDate) / (1000 * 60 * 60 * 24);
+
+                if (daysDiff >= 0 && daysDiff < 730) {
+                    if (!earlyRedemptionsByMonth[redMonthKey]) {
+                        earlyRedemptionsByMonth[redMonthKey] = { monthName: redMonthName, deductions: 0, details: [] };
+                    }
+                    const amt = Number(red.Redemption_Amount || 0);
+                    earlyRedemptionsByMonth[redMonthKey].deductions += amt;
+                    earlyRedemptionsByMonth[redMonthKey].details.push({
+                        clientName: red.Client_Name,
+                        scheme: red.Scheme,
+                        investmentDate: red.Investment_Date_Display,
+                        redemptionDate: red.Redemption_Display_Date,
+                        redemptionAmount: amt,
+                        daysDifference: Math.floor(daysDiff)
+                    });
+                }
+            });
+
+            // Process each month
+            Object.keys(lumpsumByMonth).sort().forEach(monthKey => {
+                const month = lumpsumByMonth[monthKey];
+                const deductionsThisMonth = earlyRedemptionsByMonth[monthKey]?.deductions || 0;
+                const deductionInfo = earlyRedemptionsByMonth[monthKey]?.details || [];
+
+                const netAmount = month.gross - deductionsThisMonth; // Can be negative
+                const eligibleAfterThreshold = netAmount - 2500000;   // Can be negative
+                const commission = eligibleAfterThreshold * 0.0015;  // Can be negative
+
+                totalEligibleAmount += eligibleAfterThreshold;
+                totalCommission += commission;
+
+                // Save deduction details
+                deductionInfo.forEach(info => {
+                    deductionDetails.push({
+                        month: month.monthName,
+                        clientName: info.clientName,
+                        scheme: info.scheme,
+                        investmentDate: info.investmentDate,
+                        redemptionDate: info.redemptionDate,
+                        redemptionAmount: info.redemptionAmount,
+                        daysDifference: info.daysDifference,
+                        status: "Deducted (<2 years)"
+                    });
+                });
+
+                monthWiseBreakdown.push({
+                    month: month.monthName,
+                    totalLumpsum: month.gross,
+                    deductions: deductionsThisMonth,
+                    netAmount: netAmount,
+                    threshold: 2500000,
+                    eligibleAfterThreshold: eligibleAfterThreshold,
+                    commission: Math.round(commission),
+                    status: eligibleAfterThreshold >= 0 ? "Positive (Payable)" : "Negative (Recoverable)"
+                });
+            });
+
+        } else {
+            // Non-RM: flat 0.15%
+            totalEligibleAmount = totalLumpsumAll;
+            totalCommission = totalLumpsumAll * 0.0015;
+
+            monthWiseBreakdown.push({
+                month: "All Months Combined",
+                totalLumpsum: totalLumpsumAll,
+                deductions: 0,
+                netAmount: totalLumpsumAll,
+                threshold: 0,
+                eligibleAfterThreshold: totalLumpsumAll,
+                commission: Math.round(totalCommission),
+                status: "Flat Rate Applied"
+            });
+        }
+
+        // Display rows
+        const displayRows = lumpsumRows.map(row => ({
+            RM: row.RM || '—',
+            Date: row.Date,
+            Client_Name: row.Client_Name,
+            Scheme: row.Scheme,
+            Amount: Number(row.Amount || 0),
+            Redemption_Date: row.Redemption_Date ? formatDateFromString(row.Redemption_Date) : '—'
+        }));
+
+        res.json({
+            total: Math.round(totalEligibleAmount),
+            commission: Math.round(totalCommission),
+            commissionRate: "0.15%",
+            commissionType: isRM
+                ? "RM (₹25L threshold + early redemption penalty | Negative commission recoverable)"
+                : "Non-RM (0.15% flat)",
+            rows: displayRows,
+            monthWiseBreakdown,
+            deductionDetails,
+            totalLumpsum: totalLumpsumAll,
+            totalRedemptions: redemptionRows.reduce((s, r) => s + Number(r.Redemption_Amount || 0), 0),
+            totalDeductedAmount: deductionDetails.reduce((s, d) => s + d.redemptionAmount, 0),
+            isRM
+        });
+
     } catch (err) {
-        console.error('Error calculating commission:', err);
+        console.error('Error calculating lumpsum commission:', err);
         res.status(500).json({ error: 'Failed to calculate commission' });
     }
 });
+// Helper function to format date
+function formatDateFromString(dateStr) {
+    if (!dateStr) return '—';
+    try {
+        // Handle dd-mm-yyyy format
+        if (typeof dateStr === 'string' && dateStr.includes('-')) {
+            const parts = dateStr.split('-');
+            if (parts.length === 3) {
+                const [day, month, year] = parts.map(p => parseInt(p, 10));
+                const date = new Date(year, month - 1, day);
+                return date.toLocaleDateString('en-GB');
+            }
+        }
+        // Handle ISO string
+        const date = new Date(dateStr);
+        if (!isNaN(date.getTime())) {
+            return date.toLocaleDateString('en-GB');
+        }
+        return '—';
+    } catch (e) {
+        return '—';
+    }
+}
 
-
-// for user name and password edit
 
 app.get("/api/fetchuserdata", async (req, res) => {
     try {
         const [rows] = await db.query(
-            "SELECT id, user_name, user_email,password, is_logged_in FROM users"
+            "SELECT id, user_name, user_email,password, is_logged_in FROM users where is_approved_by_admin = ?", ["approved"]
         );
 
         res.json({
@@ -1339,7 +2052,7 @@ app.post("/api/addDatabaseUser", async (req, res) => {
         }
 
         // 4️⃣ Hash password
-        const hashedPassword = await bcrypt.hash(data.password, 10);
+        // const hashedPassword = await bcrypt.hash(data.password, 10);
 
         // 5️⃣ Insert new user
         const sql = `
@@ -1350,7 +2063,7 @@ app.post("/api/addDatabaseUser", async (req, res) => {
         const [result] = await db.execute(sql, [
             data.user_name,
             data.user_email,
-            hashedPassword
+            data.password
         ]);
 
         res.status(201).json({
@@ -1377,7 +2090,6 @@ app.delete('/api/deleteUser', async (req, res) => {
         return res.status(400).json({ success: false, message: 'Invalid or missing user ID' });
     }
 
-    // console.log("User ID to delete:", id);
 
     try {
         const query = 'DELETE FROM users WHERE id = ?';
@@ -1459,7 +2171,133 @@ app.put('/api/updateUser', async (req, res) => {
     }
 });
 
+// authorising the RMs
 
+// Updated Backend Routes with ENUM values ('pending', 'approved', 'rejected')
+
+// GET /unauthorised_rm - Fetch pending (unauthorized) RMs
+app.get('/rms', async (req, res) => {
+    try {
+        const { status } = req.query;
+        if (!status || !['pending', 'approved', 'rejected'].includes(status)) {
+            return res.status(400).json({ error: 'Valid status (pending, approved, rejected) is required' });
+        }
+
+        const [rows] = await db.execute(
+            'SELECT id, user_name, user_email,registered_at FROM users WHERE role = ? AND is_approved_by_admin = ?',
+            ['rm', status]
+        );
+        res.json(rows);
+    } catch (error) {
+        console.error('Error fetching RMs:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// POST /accept_rm - Approve RM (set to 'approved')
+// POST /accept_rm - Approve RM (set to 'approved') + send email to RM
+
+async function sendRmApprovalEmail(user) {
+    if (!user || !user.user_email) {
+        console.warn('sendRmApprovalEmail: missing user or user_email');
+        return { ok: false, error: 'Missing email' };
+    }
+    const mailOptions = {
+        from: fromAddress(),
+        to: user.user_email,
+        subject: '✅ Your RM account has been approved',
+        text: `Hello ${user.user_name || ''},\n\nYour RM account has been approved.\n\n– Pramesh Team`,
+        html: `
+      <div style="font-family: Arial, sans-serif; color:#333; padding:16px;">
+        <h2 style="color:#0b6ff2;">✅ RM Account Approved</h2>
+        <p>Hi <strong>${user.user_name || 'User'}</strong>,</p>
+        <p>Your Relationship Manager (RM) account has been <strong>approved</strong>. You can now log in using your registered email: <strong>${user.user_email}</strong></p>
+        <p>If you did not register or believe this is an error, contact <a href="mailto:support@pramesh.com">support@pramesh.com</a>.</p>
+        <p style="margin-top:18px;">Best regards,<br/><strong>Pramesh Team</strong></p>
+        <hr/><small style="color:#666;">This is an automated message. Please do not reply.</small>
+      </div>
+    `
+    };
+
+    try {
+        const info = await transporter.sendMail(mailOptions);
+        console.log('✅ RM approval email sent to:', user.user_email, info.response || info);
+        return { ok: true, info };
+    } catch (error) {
+        console.error('❌ Failed to send RM approval email to', user.user_email, error);
+        return { ok: false, error };
+    }
+}
+
+app.post('/accept_rm', async (req, res) => {
+    try {
+        const { id } = req.body;
+        if (!id) return res.status(400).json({ error: 'User ID is required' });
+
+        // 1) Update user status to approved
+        const [updateResult] = await db.execute(
+            'UPDATE users SET is_approved_by_admin = ? WHERE id = ? AND role = ? AND is_approved_by_admin = ?',
+            ['approved', id, 'rm', 'pending']
+        );
+
+        if (updateResult.affectedRows === 0) {
+            return res.status(404).json({ error: 'RM not found or already approved' });
+        }
+
+        // 2) Fetch user details (name + email)
+        const [userRows] = await db.execute('SELECT user_name, user_email FROM users WHERE id = ?', [id]);
+        if (userRows.length === 0) {
+            return res.status(404).json({ error: 'Updated RM not found' });
+        }
+        const user = userRows[0];
+
+        // 3) Insert into dropdown_tags
+        await db.execute(
+            'INSERT INTO dropdown_tags (field_name, tag_value, created_at, updated_at, is_deleted) VALUES (?, ?, NOW(), NOW(), ?)',
+            ['RM', user.user_name, 0]
+        );
+
+        // 4) Send approval email (non-blocking failure)
+        if (user.user_email) {
+            const mailResult = await sendRmApprovalEmail(user);
+            if (!mailResult.ok) {
+                console.warn('⚠️ Approval email failed for user id', id, mailResult.error);
+            }
+        } else {
+            console.warn('⚠️ No email present for RM id:', id);
+        }
+
+        res.json({ message: 'RM approved successfully, added to dropdown_tags and approval email sent (if email exists).' });
+    } catch (error) {
+        console.error('Error approving RM:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+
+// POST /reject_rm - Reject RM (set to 'rejected')
+app.post('/reject_rm', async (req, res) => {
+
+    try {
+        const { id } = req.body;
+        if (!id) {
+            return res.status(400).json({ error: 'User ID is required' });
+        }
+        const [result] = await db.execute(
+            'UPDATE users SET is_approved_by_admin = ? WHERE id = ? AND role = ? AND is_approved_by_admin = ?',
+            ['rejected', id, 'rm', 'pending']
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'RM not found or already processed' });
+        }
+
+        res.json({ message: 'RM rejected successfully' });
+    } catch (error) {
+        console.error('Error rejecting RM:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 // === 🚀 Start Server ===
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, () => {

@@ -1,19 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const router = express.Router();
-
-const mysql = require('mysql2/promise');
-
-const db = mysql.createPool({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-});
-
+const db = require("./../DatabaseConnection/dbConfig")
 
 router.get('/dropdowns', async (req, res) => {
     try {
@@ -24,7 +12,6 @@ router.get('/dropdowns', async (req, res) => {
             if (!grouped[field_name]) grouped[field_name] = [];
             grouped[field_name].push(tag_value);
         });
-        // console.log("grouped", grouped)
         res.json(grouped);
     } catch (err) {
         console.error(err);
@@ -77,23 +64,47 @@ router.delete('/dropdowns/delete', async (req, res) => {
 // === Rename option ===
 router.put('/dropdowns/rename', async (req, res) => {
     const { field, oldValue, newValue } = req.body;
+    console.log("field name and tag value", field, newValue);
+
     try {
-        const [check] = await db.query(
-            'SELECT * FROM dropdown_tags WHERE field_name = ? AND tag_value = ? AND is_deleted = 0',
-            [field, newValue]
+        // 1. Fetch all tags under same field (not deleted)
+        const [rows] = await db.query(
+            'SELECT tag_value FROM dropdown_tags WHERE field_name = ? AND is_deleted = 0',
+            [field]
         );
 
-        if (check.length > 0) {
-            return res.status(400).json({ error: 'New value already exists in this field' });
+        const allTags = rows.map(r => r.tag_value.toLowerCase());
+        const oldLower = oldValue.toLowerCase();
+        const newLower = newValue.toLowerCase();
+
+        // 2. CASE A: If only case sensitivity is changed for same tag → ALLOW
+        if (oldLower === newLower) {
+            // Only case changed (apple → Apple)
+            await db.query(
+                'UPDATE dropdown_tags SET tag_value = ? WHERE field_name = ? AND tag_value = ?',
+                [newValue, field, oldValue]
+            );
+            return res.json({ success: true });
         }
 
+        // 3. CASE B: If newValue matches another existing tag (case-insensitive) → BLOCK
+        if (allTags.includes(newLower)) {
+            return res.status(400).json({
+                error: 'New value already exists in this field'
+            });
+        }
+
+        // 4. Safe update
         await db.query(
             'UPDATE dropdown_tags SET tag_value = ? WHERE field_name = ? AND tag_value = ?',
             [newValue, field, oldValue]
         );
+
         res.json({ success: true });
+
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
+
 module.exports = router;
